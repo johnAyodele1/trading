@@ -1,27 +1,23 @@
 {
-  "name": "trading",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "name": "trading-signal-app",
+  "version": "1.0.0",
+  "description": "A full-stack crypto and forex trading signal website.",
+  "main": "server/server.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "server": "npm start --prefix server",
+    "client": "npm start --prefix client",
+    "dev": "concurrently \"npm run server\" \"npm run client\""
   },
-  "dependencies": {
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0"
-  },
+  "keywords": [
+    "trading",
+    "crypto",
+    "forex",
+    "react",
+    "nodejs"
+  ],
+  "author": "",
+  "license": "ISC",
   "devDependencies": {
-    "@eslint/js": "^9.30.1",
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
-    "@vitejs/plugin-react": "^4.6.0",
-    "eslint": "^9.30.1",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.20",
-    "globals": "^16.3.0",
-    "vite": "^7.0.4"
+    "concurrently": "^8.2.2"
   }
 }
