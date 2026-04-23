@@ -1,4 +1,5 @@
 import { Signal, FeatureWeights } from '../types';
+import { AdaptiveModule } from '../learning/adaptiveModule';
 
 export class ScoringEngine {
   private weights: FeatureWeights = {
@@ -10,7 +11,7 @@ export class ScoringEngine {
     isNYSession: 0.1
   };
 
-  constructor(initialWeights?: FeatureWeights) {
+  constructor(private adaptiveModule: AdaptiveModule, initialWeights?: FeatureWeights) {
     if (initialWeights) {
       this.weights = { ...this.weights, ...initialWeights };
     }
@@ -22,29 +23,35 @@ export class ScoringEngine {
 
   calculateScore(signal: Signal): number {
     const features = signal.features;
-    let score = 0;
+    let baseScore = 0;
 
-    // Normalize and weight features
-    // Trend strength: higher is better for TREND signals
+    // Weighted sum for raw feature strength
     if (signal.regime === 'TREND') {
-      score += Math.min(Math.abs(features.trendStrength) * 10, 1) * this.weights.trendStrength;
+      baseScore += Math.min(Math.abs(features.trendStrength) * 10, 1) * this.weights.trendStrength;
     } else {
-      score += (1 - Math.min(Math.abs(features.trendStrength) * 10, 1)) * this.weights.trendStrength;
+      baseScore += (1 - Math.min(Math.abs(features.trendStrength) * 10, 1)) * this.weights.trendStrength;
     }
 
-    // Momentum: 30-70 range normalization
     const momScore = Math.abs(features.momentum - 50) / 50;
-    score += momScore * this.weights.momentum;
+    baseScore += momScore * this.weights.momentum;
+    baseScore += (1 - Math.min(features.liquidityZoneDist, 1)) * this.weights.liquidityZoneDist;
 
-    // Liquidity
-    score += (1 - Math.min(features.liquidityZoneDist, 1)) * this.weights.liquidityZoneDist;
+    if (features.isLondonSession) baseScore += this.weights.isLondonSession;
+    if (features.isNYSession) baseScore += this.weights.isNYSession;
 
-    // Session
-    if (features.isLondonSession) score += this.weights.isLondonSession;
-    if (features.isNYSession) score += this.weights.isNYSession;
+    // REAL INTELLIGENCE: Adjust score based on historical conditional expectancy
+    const session = features.isLondonSession ? 'LONDON' : (features.isNYSession ? 'NY' : 'OTHER');
+    const conditionalWinRate = this.adaptiveModule.getConditionalWinRate({
+      regime: signal.regime,
+      strategyName: signal.strategyName,
+      session: session
+    });
 
-    // Scale to 0-100
-    return Math.min(Math.round(score * 100), 100);
+    // Blend baseScore with historical performance (Bayesian-lite approach)
+    // If we have data, lean towards historical performance
+    const finalScore = (baseScore * 0.4) + (conditionalWinRate * 0.6);
+
+    return Math.min(Math.round(finalScore * 100), 100);
   }
 
   getWeights(): FeatureWeights {

@@ -1,4 +1,4 @@
-import { Signal, TradeOutcome, FeatureWeights } from '../types';
+import { Signal, TradeOutcome, FeatureWeights, MarketRegime } from '../types';
 
 interface HistoricalSignal {
   signal: Signal;
@@ -13,60 +13,81 @@ export class AdaptiveModule {
   }
 
   recordOutcome(signalId: string, outcome: TradeOutcome) {
-    const entry = this.history.find(h => h.signal.timestamp.toString() === signalId);
+    const entry = this.history.find(h => h.signal.id === signalId);
     if (entry) {
       entry.outcome = outcome;
     }
   }
 
+  getConditionalWinRate(criteria: { regime?: MarketRegime; strategyName?: string; session?: string }): number {
+    const relevant = this.history.filter(h => {
+      if (!h.outcome) return false;
+      if (criteria.regime && h.outcome.context.regime !== criteria.regime) return false;
+      if (criteria.strategyName && h.outcome.context.strategyName !== criteria.strategyName) return false;
+      if (criteria.session && h.outcome.context.session !== criteria.session) return false;
+      return true;
+    });
+
+    if (relevant.length < 3) return 0.5;
+
+    const wins = relevant.filter(h => h.outcome?.outcome === 'WIN').length;
+    return wins / relevant.length;
+  }
+
+  // Statistical Correlation-based Weight Optimization
   optimizeWeights(currentWeights: FeatureWeights): FeatureWeights {
     const completedTrades = this.history.filter(h => h.outcome !== null);
-    if (completedTrades.length < 10) return currentWeights;
+    if (completedTrades.length < 15) return currentWeights;
 
+    // We only look at the last 50 trades to maintain "rolling" relevancy
+    const lookbackTrades = completedTrades.slice(-50);
     const newWeights = { ...currentWeights };
     const features = Object.keys(currentWeights);
 
     for (const feature of features) {
-      // Simple correlation-based adjustment
-      // If feature value was high and result was WIN, increase weight slightly
-      const wins = completedTrades.filter(t => t.outcome?.outcome === 'WIN');
-      const losses = completedTrades.filter(t => t.outcome?.outcome === 'LOSS');
+      const values = lookbackTrades.map(t => Number(t.signal.features[feature]));
+      const outcomes = lookbackTrades.map(t => t.outcome?.outcome === 'WIN' ? 1 : 0);
 
-      const avgFeatureWin = wins.reduce((sum, t) => sum + (t.signal.features[feature] || 0), 0) / wins.length;
-      const avgFeatureLoss = losses.reduce((sum, t) => sum + (t.signal.features[feature] || 0), 0) / losses.length;
+      const correlation = this.calculateCorrelation(values, outcomes);
 
-      if (Math.abs(avgFeatureWin) > Math.abs(avgFeatureLoss)) {
-        newWeights[feature] = Math.min(newWeights[feature] * 1.05, 0.5);
-      } else {
-        newWeights[feature] = Math.max(newWeights[feature] * 0.95, 0.05);
+      // If correlation is positive, the feature value aligns with winning.
+      // We adjust weights based on the strength of this correlation.
+      if (Math.abs(correlation) > 0.1) {
+        if (correlation > 0) {
+            newWeights[feature] *= (1 + correlation * 0.2);
+        } else {
+            newWeights[feature] *= (1 + correlation * 0.1); // Reduce weight if negatively correlated
+        }
       }
+
+      newWeights[feature] = Math.max(0.05, Math.min(newWeights[feature], 0.4));
     }
 
-    // Re-normalize weights to sum to ~1
     const total = Object.values(newWeights).reduce((a, b) => a + b, 0);
-    for (const feature of features) {
-      newWeights[feature] /= total;
-    }
+    for (const f of features) newWeights[f] /= total;
 
     return newWeights;
   }
 
-  getWinRate(): number {
-    const completed = this.history.filter(h => h.outcome !== null);
-    if (completed.length === 0) return 0;
-    const wins = completed.filter(h => h.outcome?.outcome === 'WIN').length;
-    return wins / completed.length;
+  private calculateCorrelation(x: number[], y: number[]): number {
+    const n = x.length;
+    if (n === 0) return 0;
+    const sumX = x.reduce((a, b) => a + b, 0);
+    const sumY = y.reduce((a, b) => a + b, 0);
+    const sumXY = x.reduce((a, b, i) => a + b * y[i], 0);
+    const sumX2 = x.reduce((a, b) => a + b * b, 0);
+    const sumY2 = y.reduce((a, b) => a + b * b, 0);
+
+    const numerator = n * sumXY - sumX * sumY;
+    const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+
+    if (denominator === 0) return 0;
+    return numerator / denominator;
   }
 
-  getPerformanceStats() {
+  getWinRate(): number {
     const completed = this.history.filter(h => h.outcome !== null);
-    const winRate = this.getWinRate();
-    const totalPnL = completed.reduce((sum, h) => sum + (h.outcome?.pnl || 0), 0);
-
-    return {
-      winRate,
-      totalPnL,
-      totalTrades: completed.length
-    };
+    if (completed.length === 0) return 0.5;
+    return completed.filter(h => h.outcome?.outcome === 'WIN').length / completed.length;
   }
 }

@@ -17,6 +17,8 @@ export interface MarketData {
 }
 
 export interface Signal {
+  id: string;
+  strategyName: string;
   pair: string;
   bias: Bias;
   entry: number;
@@ -30,7 +32,7 @@ export interface Signal {
   reasoning: string;
   invalidation_reason: string;
   timestamp: number;
-  features: Record<string, number>;
+  features: Record<string, any>;
 }
 
 export interface TradeOutcome {
@@ -40,6 +42,11 @@ export interface TradeOutcome {
   exitPrice: number;
   exitTimestamp: number;
   heldDuration: number;
+  context: {
+    regime: MarketRegime;
+    strategyName: string;
+    session: string;
+  };
 }
 
 export interface FeatureWeights {
