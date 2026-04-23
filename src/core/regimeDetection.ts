@@ -7,6 +7,7 @@ export class RegimeDetection {
     index: number,
     preComputed: { ema20: number[], ema50: number[], atr14: number[] }
   ): MarketRegime {
+    // CAUSALITY: index ensures we only use data up to index 'i'
     if (index < 50) {
       return {
         primary: 'LOW_VOLATILITY',
@@ -16,13 +17,12 @@ export class RegimeDetection {
 
     const currentPrice = candles[index].close;
 
-    // Use pre-calculated average ATR for O(1) inside loop
+    // Rolling average ATR to avoid future lookahead
     const startIdx = Math.max(0, index - 50);
     const windowAtr = preComputed.atr14.slice(startIdx, index + 1);
     const avgAtr = windowAtr.reduce((a, b) => a + b, 0) / Math.max(windowAtr.length, 1);
     const currentAtr = preComputed.atr14[index];
 
-    // Slope analysis using pre-computed EMAs
     const slopeShort = (preComputed.ema20[index] - preComputed.ema20[index - 3]) / 3;
     const slopeMid = (preComputed.ema50[index] - preComputed.ema50[index - 5]) / 5;
 

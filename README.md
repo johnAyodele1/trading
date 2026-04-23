@@ -1,12 +1,58 @@
-# React + Vite
+# Forex Trade Intelligence Engine
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A professional-grade quantitative trading signal engine built with TypeScript, featuring adaptive machine learning and probabilistic market regime detection.
 
-Currently, two official plugins are available:
+## 🚀 Key Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+*   **Multi-Pair Intelligence**: Independent probabilistic models for all major pairs (EURUSD, USDJPY, etc.).
+*   **Adaptive Learning**: Online learning using Stochastic Gradient Descent (SGD) to calibrate signal confidence based on historical performance.
+*   **Probabilistic Regimes**: Softmax-based classification of market states (TREND, RANGE, LOW_VOLATILITY).
+*   **Realistic Backtesting**: No look-ahead bias, execution on next-candle open, and full modeling of transaction costs (spread, commission, slippage).
+*   **Persistence**: PostgreSQL integration for persisting ML model states and trade history.
 
-## Expanding the ESLint configuration
+## ⚙️ Setup & Configuration
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Prerequisites
+*   Node.js (v18+)
+*   PostgreSQL (optional, defaults to in-memory mode if unavailable)
+
+### Environment Variables
+Create a `.env` file in the root directory:
+```env
+ENGINE_MODE=BACKTEST  # Options: BACKTEST or LIVE
+DATABASE_URL=postgresql://user:pass@localhost:5432/db_name
+```
+
+### Installation
+```bash
+npm install
+```
+
+## 📈 Running the System
+
+### Backtest Mode
+Runs a historical simulation over the last 60 days of hourly data for all major pairs, training the models sequentially.
+```bash
+npm start
+```
+
+### Live Signal Mode
+Fetches the latest market data and outputs the highest-confidence trade setup currently available.
+```bash
+ENGINE_MODE=LIVE npm start
+```
+
+## 📊 Understanding the Output
+
+*   **Win Rate**: Percentage of trades that hit Take Profit.
+*   **Expectancy (R)**: The average profit per trade expressed in risk units. (e.g., 0.2 means on average every trade earns 20% of the amount risked).
+*   **Max Drawdown (R)**: The largest peak-to-valley decline in the equity curve, expressed in risk units.
+*   **Confidence Score**: A blend of model-predicted win probability (P(win|features)) and historical contextual evidence.
+
+## 🏗️ Architecture
+*   `src/core`: Technical indicators, feature extraction, and regime detection.
+*   `src/engine`: Probabilistic scoring model and SGD logic.
+*   `src/strategies`: Regime-aware signal generation logic.
+*   `src/backtester`: Walk-forward simulation engine.
+*   `src/learning`: Contextual performance tracking and recency-weighted stats.
+*   `src/data`: API providers (Yahoo Finance, Binance) and Database layer.

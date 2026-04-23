@@ -11,29 +11,35 @@ export class Database {
       this.pool = new Pool({
         connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/trading_engine'
       });
+      this.pool.on('error', (err) => console.error('Unexpected error on idle client', err));
     }
     return this.pool;
   }
 
   static async init() {
-    const pool = this.getPool();
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS model_states (
-        symbol VARCHAR(20) PRIMARY KEY,
-        state JSONB NOT NULL,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
+    try {
+      const pool = this.getPool();
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS model_states (
+          symbol VARCHAR(20) PRIMARY KEY,
+          state JSONB NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
 
-      CREATE TABLE IF NOT EXISTS trade_history (
-        id SERIAL PRIMARY KEY,
-        symbol VARCHAR(20) NOT NULL,
-        signal_id TEXT NOT NULL,
-        outcome VARCHAR(10) NOT NULL,
-        pnl NUMERIC NOT NULL,
-        context JSONB NOT NULL,
-        timestamp BIGINT NOT NULL
-      );
-    `);
+        CREATE TABLE IF NOT EXISTS trade_history (
+          id SERIAL PRIMARY KEY,
+          symbol VARCHAR(20) NOT NULL,
+          signal_id TEXT NOT NULL,
+          outcome VARCHAR(10) NOT NULL,
+          pnl NUMERIC NOT NULL,
+          context JSONB NOT NULL,
+          timestamp BIGINT NOT NULL
+        );
+      `);
+    } catch (err) {
+      console.error('Database initialization failed:', (err as Error).message);
+      throw err;
+    }
   }
 
   static async saveModelState(symbol: string, state: any) {

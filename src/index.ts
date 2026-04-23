@@ -32,22 +32,31 @@ async function main() {
 
     try {
       const candles = await loader.loadData(symbol);
+      console.log(`Loaded ${candles.length} candles.`);
+
+      if (candles.length < 200) {
+        console.warn(`[${symbol}] Insufficient data for analysis.`);
+        continue;
+      }
 
       if (mode === 'BACKTEST') {
         const backtester = new Backtester(strategies, scoringEngine, adaptiveModule);
-        // Correctly await the async backtester run
         const results = await backtester.run(symbol, candles);
 
         console.log(`[${symbol}] Backtest Results:`);
         console.log(` - Win Rate: ${(results.winRate * 100).toFixed(2)}%`);
-        console.log(` - Expectancy: ${results.expectancy.toFixed(5)}`);
+        console.log(` - Profit Factor: ${results.profitFactor.toFixed(2)}`);
+        console.log(` - Expectancy (R): ${results.expectancy.toFixed(3)}`);
+        console.log(` - Max Drawdown (R): ${results.maxDrawdown.toFixed(2)}`);
         console.log(` - Total Trades: ${results.totalTrades}`);
       } else {
         const live = new LiveEngine(strategies, scoringEngine);
         const signal = live.generateLiveSignal(candles);
 
         if (signal) {
-          console.log(`[${symbol}] LIVE SIGNAL: ${signal.bias} @ ${signal.entry} (Confidence: ${signal.confidence_score}%)`);
+          console.log(`[${symbol}] LIVE SIGNAL: ${signal.bias} @ ${signal.entry}`);
+          console.log(` - Confidence: ${signal.confidence_score}%`);
+          console.log(` - Reasoning: ${signal.reasoning}`);
         } else {
           console.log(`[${symbol}] No signal.`);
         }

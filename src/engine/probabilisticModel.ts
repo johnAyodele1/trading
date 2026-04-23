@@ -13,7 +13,7 @@ export class ProbabilisticModel {
     });
   }
 
-  predict(features: Record<string, any>): number {
+  predict(features: Record<string, number | string | boolean | object>): number {
     let logit = this.bias;
     for (const [f, weight] of Object.entries(this.coefficients)) {
       const val = this.getFeatureValue(f, features);
@@ -32,7 +32,7 @@ export class ProbabilisticModel {
     return isNaN(val) ? 0 : val;
   }
 
-  train(features: Record<string, any>, outcome: number) {
+  train(features: Record<string, number | string | boolean | object>, outcome: number) {
     const prediction = this.predict(features);
     const error = outcome - prediction;
 
@@ -46,7 +46,6 @@ export class ProbabilisticModel {
     this.bias += lr * error;
   }
 
-  // Persistence logic
   saveState(): string {
     return JSON.stringify({
       coefficients: this.coefficients,

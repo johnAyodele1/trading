@@ -33,7 +33,7 @@ export class ScoringEngine {
           this.getModel(symbol).loadState(JSON.stringify(state));
         }
       } catch (err) {
-        // Silently fail if DB is not available
+        console.error(`Failed to load model state for ${symbol}:`, err);
       }
     }
   }
@@ -54,14 +54,14 @@ export class ScoringEngine {
     return Math.min(Math.round(finalScore * 100), 100);
   }
 
-  async trainModel(symbol: string, features: Record<string, any>, outcome: number) {
+  async trainModel(symbol: string, features: Record<string, number | string | boolean>, outcome: number) {
     const model = this.getModel(symbol);
     model.train(features, outcome);
 
     try {
       await Database.saveModelState(symbol, JSON.parse(model.saveState()));
     } catch (err) {
-      // Silently fail if DB is not available
+      console.error(`Failed to save model state for ${symbol}:`, err);
     }
   }
 

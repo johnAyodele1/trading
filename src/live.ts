@@ -1,22 +1,21 @@
-import { TrendFollowingStrategy, MeanReversionStrategy } from './strategies/base';
+import { Strategy } from './strategies/base';
 import { ScoringEngine } from './engine/scoring';
-import { AdaptiveModule } from './learning/adaptiveModule';
 import { FeatureExtractor } from './core/featureExtractor';
-import { OHLCV } from './types';
+import { OHLCV, Signal } from './types';
 
 export class LiveEngine {
   constructor(
-    private strategies: any[],
+    private strategies: Strategy[],
     private scoringEngine: ScoringEngine
   ) {}
 
-  generateLiveSignal(candles: OHLCV[]): any | null {
+  generateLiveSignal(candles: OHLCV[]): Signal | null {
     const allFeatures = FeatureExtractor.extractAll(candles);
     const lastIdx = allFeatures.length - 1;
     const currentFeatures = allFeatures[lastIdx];
     const data = { pair: 'LIVE', candles };
 
-    const signals: any[] = [];
+    const signals: Signal[] = [];
 
     for (const strategy of this.strategies) {
       const signal = strategy.generateSignal(data, currentFeatures);
@@ -26,7 +25,6 @@ export class LiveEngine {
       }
     }
 
-    // Return highest confidence signal
     if (signals.length === 0) return null;
     return signals.sort((a, b) => b.confidence_score - a.confidence_score)[0];
   }
