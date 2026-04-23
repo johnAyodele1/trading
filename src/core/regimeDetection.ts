@@ -1,9 +1,14 @@
-import { OHLCV, MarketRegime } from '../types';
+import { OHLCV, MarketRegime, MarketRegimeType } from '../types';
 import { Indicators } from './indicators';
 
 export class RegimeDetection {
   static detect(candles: OHLCV[]): MarketRegime {
-    if (candles.length < 50) return 'LOW_VOLATILITY';
+    if (candles.length < 50) {
+      return {
+        primary: 'LOW_VOLATILITY',
+        probabilities: { TREND: 0.1, RANGE: 0.1, LOW_VOLATILITY: 0.8 }
+      };
+    }
 
     const closes = candles.map(c => c.close);
     const ema50 = Indicators.ema(closes, 50);
@@ -13,28 +18,30 @@ export class RegimeDetection {
     const avgAtr = atr.slice(-20).reduce((a, b) => a + b, 0) / 20;
     const currentAtr = atr[atr.length - 1];
 
-    // Low Volatility Check
-    if (currentAtr < avgAtr * 0.7) {
-      return 'LOW_VOLATILITY';
-    }
-
-    // Slope analysis for Trend
+    // Slope analysis
     const slope = Indicators.emaSlope(ema50, 5);
     const normalizedSlope = Math.abs(slope / currentPrice) * 10000;
 
-    // Structure Analysis
-    const isHigherHigh = candles[candles.length - 1].high > candles[candles.length - 2].high;
-    const isLowerLow = candles[candles.length - 1].low < candles[candles.length - 2].low;
+    // Calculate raw scores for each regime
+    let trendScore = Math.min(normalizedSlope / 0.8, 1.0);
+    let rangeScore = 1.0 - Math.min(normalizedSlope / 0.4, 1.0);
+    let lowVolScore = currentAtr < avgAtr ? (avgAtr - currentAtr) / avgAtr : 0;
 
-    if (normalizedSlope > 0.5) {
-      return 'TREND';
+    // Softmax-like normalization
+    const total = trendScore + rangeScore + lowVolScore;
+    const probabilities = {
+      TREND: trendScore / total,
+      RANGE: rangeScore / total,
+      LOW_VOLATILITY: lowVolScore / total
+    };
+
+    let primary: MarketRegimeType = 'RANGE';
+    if (probabilities.TREND > probabilities.RANGE && probabilities.TREND > probabilities.LOW_VOLATILITY) {
+      primary = 'TREND';
+    } else if (probabilities.LOW_VOLATILITY > probabilities.TREND && probabilities.LOW_VOLATILITY > probabilities.RANGE) {
+      primary = 'LOW_VOLATILITY';
     }
 
-    if (normalizedSlope < 0.2 && !isHigherHigh && !isLowerLow) {
-      return 'RANGE';
-    }
-
-    // Default to TREND if there is movement, or RANGE if price is choppy
-    return normalizedSlope > 0.3 ? 'TREND' : 'RANGE';
+    return { primary, probabilities };
   }
 }

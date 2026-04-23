@@ -1,4 +1,8 @@
-export type MarketRegime = 'TREND' | 'RANGE' | 'LOW_VOLATILITY';
+export type MarketRegimeType = 'TREND' | 'RANGE' | 'LOW_VOLATILITY';
+export interface MarketRegime {
+  primary: MarketRegimeType;
+  probabilities: Record<MarketRegimeType, number>;
+}
 export type Bias = 'BUY' | 'SELL';
 
 export interface OHLCV {
