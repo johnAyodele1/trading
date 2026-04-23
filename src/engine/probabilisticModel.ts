@@ -3,36 +3,48 @@ import { FeatureWeights } from '../types';
 export class ProbabilisticModel {
   private coefficients: FeatureWeights = {};
   private bias: number = 0;
-  private learningRate: number = 0.05;
+  private initialLearningRate: number = 0.05;
+  private decayRate: number = 0.001;
+  private iteration: number = 0;
 
   constructor(features: string[]) {
     features.forEach(f => {
-      this.coefficients[f] = 0.01; // Small non-zero initialization
+      this.coefficients[f] = 0.01;
     });
   }
 
   predict(features: Record<string, any>): number {
     let logit = this.bias;
     for (const [f, weight] of Object.entries(this.coefficients)) {
-      const val = Number(features[f]);
-      if (!isNaN(val)) {
-        logit += val * weight;
-      }
+      const val = this.getFeatureValue(f, features);
+      logit += val * weight;
     }
     return 1 / (1 + Math.exp(-logit));
+  }
+
+  private getFeatureValue(f: string, features: Record<string, any>): number {
+    if (f === 'regime_TREND') return features.regime?.probabilities?.TREND || 0;
+    if (f === 'regime_RANGE') return features.regime?.probabilities?.RANGE || 0;
+    if (f === 'session_LONDON') return features.isLondonSession ? 1 : 0;
+    if (f === 'session_NY') return features.isNYSession ? 1 : 0;
+
+    const val = Number(features[f]);
+    return isNaN(val) ? 0 : val;
   }
 
   train(features: Record<string, any>, outcome: number) {
     const prediction = this.predict(features);
     const error = outcome - prediction;
 
+    // Learning rate decay for stability
+    const lr = this.initialLearningRate / (1 + this.decayRate * this.iteration);
+    this.iteration++;
+
     for (const f of Object.keys(this.coefficients)) {
-      const val = Number(features[f]);
-      if (!isNaN(val)) {
-        this.coefficients[f] += this.learningRate * error * val;
-      }
+      const val = this.getFeatureValue(f, features);
+      this.coefficients[f] += lr * error * val;
     }
-    this.bias += this.learningRate * error;
+    this.bias += lr * error;
   }
 
   getCoefficients(): FeatureWeights {

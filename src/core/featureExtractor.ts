@@ -1,55 +1,74 @@
-import { OHLCV } from '../types';
+import { OHLCV, MarketRegime } from '../types';
 import { Indicators } from './indicators';
+import { RegimeDetection } from './regimeDetection';
 
 export interface MarketFeatures {
-  trendStrength: number; // EMA slope normalized
-  momentum: number;      // RSI
-  volatility: number;    // ATR relative to price
-  priceChange: number;   // Percentage change over lookback
-  liquidityZoneDist: number; // Distance to nearest high/low
+  trendStrength: number;
+  momentum: number;
+  volatility: number;
+  priceChange: number;
+  liquidityZoneDist: number;
   isLondonSession: boolean;
   isNYSession: boolean;
+  regime: MarketRegime;
 }
 
 export class FeatureExtractor {
-  static extract(candles: OHLCV[]): MarketFeatures {
+  // O(n) pre-calculation of features
+  static extractAll(candles: OHLCV[]): MarketFeatures[] {
     const closes = candles.map(c => c.close);
+    const highs = candles.map(c => c.high);
+    const lows = candles.map(c => c.low);
+
     const ema20 = Indicators.ema(closes, 20);
+    const ema50 = Indicators.ema(closes, 50);
     const rsi14 = Indicators.rsi(closes, 14);
     const atr14 = Indicators.atr(candles, 14);
 
-    const currentPrice = closes[closes.length - 1];
-    const slope = Indicators.emaSlope(ema20, 5);
-    const trendStrength = slope / currentPrice * 1000; // Normalized slope
+    return candles.map((candle, i) => {
+      const currentPrice = candle.close;
 
-    const momentum = rsi14[rsi14.length - 1];
-    const volatility = (atr14[atr14.length - 1] / currentPrice) * 100;
+      // Trend strength
+      const emaWindow = ema20.slice(0, i + 1);
+      const slope = Indicators.emaSlope(emaWindow, 5);
+      const trendStrength = slope / currentPrice * 1000;
 
-    const lookback = 10;
-    const priceChange = ((currentPrice - closes[closes.length - lookback]) / closes[closes.length - lookback]) * 100;
+      // Momentum and Volatility
+      const momentum = rsi14[i];
+      const volatility = (atr14[i] / currentPrice) * 100;
 
-    const recentHigh = Math.max(...candles.slice(-20).map(c => c.high));
-    const recentLow = Math.min(...candles.slice(-20).map(c => c.low));
-    const distToHigh = (recentHigh - currentPrice) / currentPrice;
-    const distToLow = (currentPrice - recentLow) / currentPrice;
-    const liquidityZoneDist = Math.min(distToHigh, distToLow) * 100;
+      // Price Change
+      const lookback = 10;
+      const prevPrice = i >= lookback ? closes[i - lookback] : closes[0];
+      const priceChange = ((currentPrice - prevPrice) / prevPrice) * 100;
 
-    const date = new Date(candles[candles.length - 1].timestamp);
-    const hour = date.getUTCHours();
+      // Liquidity
+      const start = Math.max(0, i - 20);
+      const recentHigh = Math.max(...highs.slice(start, i + 1));
+      const recentLow = Math.min(...lows.slice(start, i + 1));
+      const distToHigh = (recentHigh - currentPrice) / currentPrice;
+      const distToLow = (currentPrice - recentLow) / currentPrice;
+      const liquidityZoneDist = Math.min(distToHigh, distToLow) * 100;
 
-    // London: 08:00 - 16:00 UTC
-    // NY: 13:00 - 21:00 UTC
-    const isLondonSession = hour >= 8 && hour < 16;
-    const isNYSession = hour >= 13 && hour < 21;
+      // Session
+      const date = new Date(candle.timestamp);
+      const hour = date.getUTCHours();
+      const isLondonSession = hour >= 8 && hour < 16;
+      const isNYSession = hour >= 13 && hour < 21;
 
-    return {
-      trendStrength,
-      momentum,
-      volatility,
-      priceChange,
-      liquidityZoneDist,
-      isLondonSession,
-      isNYSession
-    };
+      // Regime (Calculated iteratively to avoid full re-run)
+      const regime = RegimeDetection.detect(candles.slice(0, i + 1));
+
+      return {
+        trendStrength,
+        momentum,
+        volatility,
+        priceChange,
+        liquidityZoneDist,
+        isLondonSession,
+        isNYSession,
+        regime
+      };
+    });
   }
 }

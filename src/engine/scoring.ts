@@ -11,16 +11,18 @@ export class ScoringEngine {
       'momentum',
       'volatility',
       'liquidityZoneDist',
-      'isLondonSession',
-      'isNYSession'
+      'regime_TREND',
+      'regime_RANGE',
+      'session_LONDON',
+      'session_NY'
     ]);
   }
 
   calculateScore(signal: Signal): number {
-    // 1. Get P(win | features) from probabilistic model
+    // Probabilistic Model now handles regime and session as features internally
     const winProbability = this.model.predict(signal.features);
 
-    // 2. Get historical success of the specific context (Regime, Session, Strategy)
+    // Still blend with raw historical frequency for robustness (Bayesian prior)
     const session = signal.features.isLondonSession ? 'LONDON' : (signal.features.isNYSession ? 'NY' : 'OTHER');
     const conditionalWinRate = this.adaptiveModule.getConditionalWinRate({
       regime: signal.regime.primary,
@@ -28,9 +30,7 @@ export class ScoringEngine {
       session: session
     });
 
-    // 3. Bayesian blending: Combine prediction with historical base rates
-    // Weighted Blend: 70% model prediction, 30% historical context evidence
-    const finalScore = (winProbability * 0.7) + (conditionalWinRate * 0.3);
+    const finalScore = (winProbability * 0.8) + (conditionalWinRate * 0.2);
 
     return Math.min(Math.round(finalScore * 100), 100);
   }

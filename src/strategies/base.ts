@@ -1,24 +1,21 @@
 import { OHLCV, Bias, Signal } from '../types';
-import { FeatureExtractor } from '../core/featureExtractor';
-import { RegimeDetection } from '../core/regimeDetection';
+import { MarketFeatures } from '../core/featureExtractor';
 
 export interface Strategy {
   name: string;
-  generateSignal(data: { pair: string, candles: OHLCV[] }): Signal | null;
+  generateSignal(data: { pair: string, candles: OHLCV[] }, preExtractedFeatures?: MarketFeatures): Signal | null;
 }
 
 export class TrendFollowingStrategy implements Strategy {
   name = 'TrendFollowing';
 
-  generateSignal(data: { pair: string, candles: OHLCV[] }): Signal | null {
-    const candles = data.candles;
-    const regime = RegimeDetection.detect(candles);
+  generateSignal(data: { pair: string, candles: OHLCV[] }, features?: MarketFeatures): Signal | null {
+    if (!features) return null; // In O(n) mode, features must be provided
 
-    // Probabilistic Ensemble: Only execute if TREND probability is dominant or significant
+    const regime = features.regime;
     if (regime.probabilities.TREND < 0.4) return null;
 
-    const features = FeatureExtractor.extract(candles);
-    const currentPrice = candles[candles.length - 1].close;
+    const currentPrice = data.candles[data.candles.length - 1].close;
 
     if (features.volatility > 0.5 || features.volatility < 0.02) return null;
 
@@ -45,7 +42,7 @@ export class TrendFollowingStrategy implements Strategy {
       confluences: ['Probabilistic Trend', 'Momentum'],
       reasoning: `Trend following ${bias} (P=${regime.probabilities.TREND.toFixed(2)})`,
       invalidation_reason: 'Trend exhaustion',
-      timestamp: Date.now(),
+      timestamp: data.candles[data.candles.length - 1].timestamp,
       features: features as any
     };
   }
@@ -54,14 +51,13 @@ export class TrendFollowingStrategy implements Strategy {
 export class MeanReversionStrategy implements Strategy {
   name = 'MeanReversion';
 
-  generateSignal(data: { pair: string, candles: OHLCV[] }): Signal | null {
-    const candles = data.candles;
-    const regime = RegimeDetection.detect(candles);
+  generateSignal(data: { pair: string, candles: OHLCV[] }, features?: MarketFeatures): Signal | null {
+    if (!features) return null;
 
+    const regime = features.regime;
     if (regime.probabilities.RANGE < 0.4) return null;
 
-    const features = FeatureExtractor.extract(candles);
-    const currentPrice = candles[candles.length - 1].close;
+    const currentPrice = data.candles[data.candles.length - 1].close;
 
     if (features.volatility > 0.3) return null;
 
@@ -90,7 +86,7 @@ export class MeanReversionStrategy implements Strategy {
       confluences: ['RSI Oversold/Overbought', 'Probabilistic Range'],
       reasoning: `Mean reversion ${bias} (P=${regime.probabilities.RANGE.toFixed(2)})`,
       invalidation_reason: 'Range breakout',
-      timestamp: Date.now(),
+      timestamp: data.candles[data.candles.length - 1].timestamp,
       features: features as any
     };
   }
