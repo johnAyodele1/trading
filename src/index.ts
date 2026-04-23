@@ -3,7 +3,8 @@ import { ScoringEngine } from './engine/scoring';
 import { AdaptiveModule } from './learning/adaptiveModule';
 import { Backtester } from './backtester/engine';
 import { YahooFinanceProvider } from './data/yahooFinanceProvider';
-import { LiveEngine } from './live';
+import { WalkForwardOptimizer } from './backtester/walkForward';
+import { MonteCarloSimulator } from './backtester/monteCarlo';
 import { Database } from './data/db';
 import * as dotenv from 'dotenv';
 
@@ -15,55 +16,42 @@ const MAJOR_PAIRS = [
 ];
 
 async function main() {
-  const mode = process.env.ENGINE_MODE || 'BACKTEST';
-  console.log(`--- Forex Intelligence Engine (Mode: ${mode}) ---`);
+  console.log('--- Institutional-Grade Forex Engine ---');
 
+  // Initialize Database for persistence
   await Database.init().catch(e => console.warn('Postgres connection failed, using in-memory mode.'));
 
   const adaptiveModule = new AdaptiveModule();
   const scoringEngine = new ScoringEngine(adaptiveModule);
-  await scoringEngine.initialize(MAJOR_PAIRS);
-
   const strategies = [new TrendFollowingStrategy(), new MeanReversionStrategy()];
   const loader = new YahooFinanceProvider();
 
+  console.log('Loading multi-asset context (DXY, Gold, TNX)...');
+  const context = await loader.loadMultiAssetContext();
+
+  const walkForward = new WalkForwardOptimizer(strategies, scoringEngine, adaptiveModule);
+
   for (const symbol of MAJOR_PAIRS) {
-    console.log(`\nProcessing ${symbol}...`);
+    console.log(`\nAnalyzing ${symbol}...`);
+    const candles = await loader.loadData(symbol, 90);
 
-    try {
-      const candles = await loader.loadData(symbol);
-      console.log(`Loaded ${candles.length} candles.`);
-
-      if (candles.length < 200) {
-        console.warn(`[${symbol}] Insufficient data for analysis.`);
-        continue;
-      }
-
-      if (mode === 'BACKTEST') {
-        const backtester = new Backtester(strategies, scoringEngine, adaptiveModule);
-        const results = await backtester.run(symbol, candles);
-
-        console.log(`[${symbol}] Backtest Results:`);
-        console.log(` - Win Rate: ${(results.winRate * 100).toFixed(2)}%`);
-        console.log(` - Profit Factor: ${results.profitFactor.toFixed(2)}`);
-        console.log(` - Expectancy (R): ${results.expectancy.toFixed(3)}`);
-        console.log(` - Max Drawdown (R): ${results.maxDrawdown.toFixed(2)}`);
-        console.log(` - Total Trades: ${results.totalTrades}`);
-      } else {
-        const live = new LiveEngine(strategies, scoringEngine);
-        const signal = live.generateLiveSignal(candles);
-
-        if (signal) {
-          console.log(`[${symbol}] LIVE SIGNAL: ${signal.bias} @ ${signal.entry}`);
-          console.log(` - Confidence: ${signal.confidence_score}%`);
-          console.log(` - Reasoning: ${signal.reasoning}`);
-        } else {
-          console.log(`[${symbol}] No signal.`);
-        }
-      }
-    } catch (err) {
-      console.error(`Failed to process ${symbol}:`, (err as Error).message);
+    if (candles.length < 500) {
+      console.warn(`[${symbol}] Insufficient data.`);
+      continue;
     }
+
+    const results = await walkForward.runWalkForward(symbol, candles, context);
+
+    console.log(`[${symbol}] OOS Win Rate: ${(results.winRate * 100).toFixed(2)}%`);
+    console.log(`[${symbol}] OOS Expectancy: ${results.expectancy.toFixed(3)}`);
+    console.log(`[${symbol}] OOS Max Drawdown: ${results.maxDrawdown.toFixed(2)} R`);
+
+    // Basic Monte Carlo for robustness check
+    const simulator = new Backtester(strategies, scoringEngine, adaptiveModule);
+    await simulator.run(symbol, candles, context);
+    const outcomes = simulator.getOutcomes();
+    const mc = MonteCarloSimulator.run(outcomes);
+    console.log(`[${symbol}] Monte Carlo Stability Score: ${mc.stability.toFixed(2)}`);
   }
 }
 
