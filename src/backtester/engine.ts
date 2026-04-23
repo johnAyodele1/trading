@@ -18,25 +18,18 @@ export class Backtester {
     private adaptiveModule: AdaptiveModule
   ) {}
 
-  run(pair: string, candles: OHLCV[]): PerformanceMetrics {
+  async run(pair: string, candles: OHLCV[]): Promise<PerformanceMetrics> {
     const lookback = 200;
-
-    // O(n) Optimization: Pre-calculate all features once
     const allFeatures = FeatureExtractor.extractAll(candles);
 
     for (let i = lookback; i < candles.length - 51; i++) {
       const features = allFeatures[i];
-      const data: MarketData = {
-        pair,
-        timeframe: 'H1',
-        candles: candles.slice(0, i + 1) // Still pass candles for logic that needs it, but features are pre-extracted
-      };
+      const data: MarketData = { pair, timeframe: 'H1', candles: candles.slice(0, i + 1) };
 
       for (const strategy of this.strategies) {
-        // Strategy should ideally use pre-extracted features
         const signal = strategy.generateSignal(data, features);
         if (signal) {
-          signal.confidence_score = this.scoringEngine.calculateScore(signal);
+          signal.confidence_score = this.scoringEngine.calculateScore(signal, candles[i].timestamp);
 
           if (signal.confidence_score > 55) {
             const nextCandle = candles[i + 1];
@@ -49,7 +42,8 @@ export class Backtester {
               this.adaptiveModule.recordOutcome(signal.id, outcome);
 
               const winLabel = outcome.outcome === 'WIN' ? 1 : 0;
-              this.scoringEngine.trainModel(signal.features, winLabel);
+              // CRITICAL: Await model training and persistence during backtest
+              await this.scoringEngine.trainModel(pair, signal.features, winLabel);
             }
           }
         }
@@ -75,50 +69,37 @@ export class Backtester {
 
   private checkCandle(signal: Signal, candle: OHLCV, entryPrice: number, totalCosts: number, duration: number): TradeOutcome | null {
     const exitCosts = totalCosts / 2;
-
     if (signal.bias === 'BUY') {
       if (candle.low <= signal.stop_loss) {
         return {
-          signalId: signal.id,
-          outcome: 'LOSS',
+          signalId: signal.id, outcome: 'LOSS',
           pnl: ((signal.stop_loss - exitCosts) - entryPrice) / (entryPrice - signal.stop_loss),
-          exitPrice: signal.stop_loss - exitCosts,
-          exitTimestamp: candle.timestamp,
-          heldDuration: duration,
+          exitPrice: signal.stop_loss - exitCosts, exitTimestamp: candle.timestamp, heldDuration: duration,
           context: { regime: signal.regime, strategyName: signal.strategyName, session: this.getSession(signal) }
         };
       }
       if (candle.high >= signal.take_profit) {
         return {
-          signalId: signal.id,
-          outcome: 'WIN',
+          signalId: signal.id, outcome: 'WIN',
           pnl: ((signal.take_profit - exitCosts) - entryPrice) / (entryPrice - signal.stop_loss),
-          exitPrice: signal.take_profit - exitCosts,
-          exitTimestamp: candle.timestamp,
-          heldDuration: duration,
+          exitPrice: signal.take_profit - exitCosts, exitTimestamp: candle.timestamp, heldDuration: duration,
           context: { regime: signal.regime, strategyName: signal.strategyName, session: this.getSession(signal) }
         };
       }
     } else {
       if (candle.high >= signal.stop_loss) {
         return {
-          signalId: signal.id,
-          outcome: 'LOSS',
+          signalId: signal.id, outcome: 'LOSS',
           pnl: (entryPrice - (signal.stop_loss + exitCosts)) / (signal.stop_loss - entryPrice),
-          exitPrice: signal.stop_loss + exitCosts,
-          exitTimestamp: candle.timestamp,
-          heldDuration: duration,
+          exitPrice: signal.stop_loss + exitCosts, exitTimestamp: candle.timestamp, heldDuration: duration,
           context: { regime: signal.regime, strategyName: signal.strategyName, session: this.getSession(signal) }
         };
       }
       if (candle.low <= signal.take_profit) {
         return {
-          signalId: signal.id,
-          outcome: 'WIN',
+          signalId: signal.id, outcome: 'WIN',
           pnl: (entryPrice - (signal.take_profit + exitCosts)) / (signal.stop_loss - entryPrice),
-          exitPrice: signal.take_profit + exitCosts,
-          exitTimestamp: candle.timestamp,
-          heldDuration: duration,
+          exitPrice: signal.take_profit + exitCosts, exitTimestamp: candle.timestamp, heldDuration: duration,
           context: { regime: signal.regime, strategyName: signal.strategyName, session: this.getSession(signal) }
         };
       }
@@ -133,28 +114,20 @@ export class Backtester {
   private calculateMetrics(): PerformanceMetrics {
     const totalTrades = this.outcomes.length;
     if (totalTrades === 0) return { winRate: 0, profitFactor: 0, maxDrawdown: 0, expectancy: 0, totalTrades: 0 };
-
     const wins = this.outcomes.filter(o => o.outcome === 'WIN');
     const losses = this.outcomes.filter(o => o.outcome === 'LOSS');
     const winRate = wins.length / totalTrades;
-
     const grossProfit = wins.reduce((s, o) => s + Math.max(0, o.pnl), 0);
     const grossLoss = Math.abs(losses.reduce((s, o) => s + Math.min(0, o.pnl), 0));
     const profitFactor = grossLoss === 0 ? grossProfit : grossProfit / grossLoss;
-
     const expectancy = this.outcomes.reduce((s, o) => s + o.pnl, 0) / totalTrades;
-
-    let maxDrawdown = 0;
-    let peakPnL = 0;
-    let currentPnL = 0;
-
+    let maxDrawdown = 0, peakPnL = 0, currentPnL = 0;
     for (const outcome of this.outcomes) {
       currentPnL += outcome.pnl;
       if (currentPnL > peakPnL) peakPnL = currentPnL;
       const dd = peakPnL - currentPnL;
       if (dd > maxDrawdown) maxDrawdown = dd;
     }
-
     return { winRate, profitFactor, maxDrawdown, expectancy, totalTrades };
   }
 

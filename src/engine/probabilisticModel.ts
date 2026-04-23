@@ -36,7 +36,6 @@ export class ProbabilisticModel {
     const prediction = this.predict(features);
     const error = outcome - prediction;
 
-    // Learning rate decay for stability
     const lr = this.initialLearningRate / (1 + this.decayRate * this.iteration);
     this.iteration++;
 
@@ -45,6 +44,22 @@ export class ProbabilisticModel {
       this.coefficients[f] += lr * error * val;
     }
     this.bias += lr * error;
+  }
+
+  // Persistence logic
+  saveState(): string {
+    return JSON.stringify({
+      coefficients: this.coefficients,
+      bias: this.bias,
+      iteration: this.iteration
+    });
+  }
+
+  loadState(stateJson: string) {
+    const state = JSON.parse(stateJson);
+    this.coefficients = state.coefficients;
+    this.bias = state.bias;
+    this.iteration = state.iteration;
   }
 
   getCoefficients(): FeatureWeights {

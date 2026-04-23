@@ -7,7 +7,6 @@ interface HistoricalSignal {
 
 export class AdaptiveModule {
   private history: HistoricalSignal[] = [];
-  // Feature importance decay over time
   private decayFactor = 0.98;
 
   recordSignal(signal: Signal) {
@@ -21,21 +20,22 @@ export class AdaptiveModule {
     }
   }
 
-  getConditionalWinRate(criteria: { regime?: MarketRegimeType; strategyName?: string; session?: string }): number {
-    const now = Date.now();
+  // Use simulation 'now' for realistic decay during backtests
+  getConditionalWinRate(criteria: { regime?: MarketRegimeType; strategyName?: string; session?: string }, simulationTime?: number): number {
+    const now = simulationTime || Date.now();
     let weightedWins = 0;
     let weightedTotal = 0;
 
     for (const h of this.history) {
       if (!h.outcome) continue;
 
-      // Fixed the type mismatch by accessing .primary
       if (criteria.regime && h.outcome.context.regime.primary !== criteria.regime) continue;
       if (criteria.strategyName && h.outcome.context.strategyName !== criteria.strategyName) continue;
       if (criteria.session && h.outcome.context.session !== criteria.session) continue;
 
+      // Decay relative to the time the signal was generated in the simulation
       const hoursAgo = (now - h.signal.timestamp) / 3600000;
-      const weight = Math.pow(this.decayFactor, hoursAgo);
+      const weight = Math.pow(this.decayFactor, Math.max(0, hoursAgo));
 
       if (h.outcome.outcome === 'WIN') {
         weightedWins += weight;

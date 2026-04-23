@@ -2,52 +2,59 @@ import { TrendFollowingStrategy, MeanReversionStrategy } from './strategies/base
 import { ScoringEngine } from './engine/scoring';
 import { AdaptiveModule } from './learning/adaptiveModule';
 import { Backtester } from './backtester/engine';
-import { OHLCV } from './types';
+import { YahooFinanceProvider } from './data/yahooFinanceProvider';
+import { LiveEngine } from './live';
+import { Database } from './data/db';
+import * as dotenv from 'dotenv';
 
-const generateData = (count: number): OHLCV[] => {
-  const candles: OHLCV[] = [];
-  let price = 1.0850;
-  for (let i = 0; i < count; i++) {
-    const change = (Math.random() - 0.49) * 0.0015; // Slightly more balanced
-    const open = price;
-    const close = price + change;
-    candles.push({
-      timestamp: Date.now() - (count - i) * 3600000,
-      open, high: Math.max(open, close) + 0.0004, low: Math.min(open, close) - 0.0004, close, volume: 100
-    });
-    price = close;
-  }
-  return candles;
-};
+dotenv.config();
+
+const MAJOR_PAIRS = [
+  'EURUSD=X', 'USDJPY=X', 'GBPUSD=X', 'AUDUSD=X',
+  'USDCHF=X', 'USDCAD=X', 'NZDUSD=X'
+];
 
 async function main() {
-  console.log('--- Forex Intelligence Engine (Enhanced) ---');
+  const mode = process.env.ENGINE_MODE || 'BACKTEST';
+  console.log(`--- Forex Intelligence Engine (Mode: ${mode}) ---`);
 
-  const candles = generateData(1500);
+  await Database.init().catch(e => console.warn('Postgres connection failed, using in-memory mode.'));
+
   const adaptiveModule = new AdaptiveModule();
   const scoringEngine = new ScoringEngine(adaptiveModule);
+  await scoringEngine.initialize(MAJOR_PAIRS);
+
   const strategies = [new TrendFollowingStrategy(), new MeanReversionStrategy()];
-  const backtester = new Backtester(strategies, scoringEngine, adaptiveModule);
+  const loader = new YahooFinanceProvider();
 
-  console.log('\nRunning backtest with transaction costs and conditional learning...');
-  const results = backtester.run('EURUSD', candles);
+  for (const symbol of MAJOR_PAIRS) {
+    console.log(`\nProcessing ${symbol}...`);
 
-  console.log('\n--- Enhanced Backtest Results ---');
-  console.log(`Pair: EURUSD`);
-  console.log(`Total Trades: ${results.totalTrades}`);
-  console.log(`Win Rate: ${(results.winRate * 100).toFixed(2)}%`);
-  console.log(`Profit Factor: ${results.profitFactor.toFixed(2)}`);
-  console.log(`Max Drawdown: ${results.maxDrawdown.toFixed(2)} units`);
-  console.log(`Expectancy: ${results.expectancy.toFixed(5)}`);
+    try {
+      const candles = await loader.loadData(symbol);
 
-  console.log('\n--- Adaptive Weights (Correlation-based) ---');
-  console.log(JSON.stringify(scoringEngine.getWeights(), null, 2));
+      if (mode === 'BACKTEST') {
+        const backtester = new Backtester(strategies, scoringEngine, adaptiveModule);
+        // Correctly await the async backtester run
+        const results = await backtester.run(symbol, candles);
 
-  const signals = backtester.getSignals();
-  if (signals.length > 0) {
-    console.log('\n--- Latest Signal (Intelligent Calibration) ---');
-    const lastSignal = signals[signals.length - 1];
-    console.log(JSON.stringify(lastSignal, null, 2));
+        console.log(`[${symbol}] Backtest Results:`);
+        console.log(` - Win Rate: ${(results.winRate * 100).toFixed(2)}%`);
+        console.log(` - Expectancy: ${results.expectancy.toFixed(5)}`);
+        console.log(` - Total Trades: ${results.totalTrades}`);
+      } else {
+        const live = new LiveEngine(strategies, scoringEngine);
+        const signal = live.generateLiveSignal(candles);
+
+        if (signal) {
+          console.log(`[${symbol}] LIVE SIGNAL: ${signal.bias} @ ${signal.entry} (Confidence: ${signal.confidence_score}%)`);
+        } else {
+          console.log(`[${symbol}] No signal.`);
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to process ${symbol}:`, (err as Error).message);
+    }
   }
 }
 
