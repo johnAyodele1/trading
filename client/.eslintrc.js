@@ -2,22 +2,22 @@ module.exports = {
   env: {
     es6: true,
     jest: true,
-    browser: true
+    browser: true,
   },
-  extends: ["airbnb"],
+  extends: ["react-app", "react-app/jest"],
   globals: {
     Atomics: "readonly",
     SharedArrayBuffer: "readonly",
-    __DEV__: true
+    __DEV__: true,
   },
   parserOptions: {
     ecmaFeatures: {
-      jsx: true
+      jsx: true,
     },
     ecmaVersion: 2018,
-    sourceType: "module"
+    sourceType: "module",
   },
-  plugins: ["react", "jsx-a11y", "import", "import-helpers", "react-hooks"],
+  plugins: ["react", "jsx-a11y", "import", "react-hooks"],
   rules: {
     "react/jsx-filename-extension": ["error", { extensions: [".js", ".jsx"] }],
     "import/prefer-default-export": "off",
@@ -32,17 +32,5 @@ module.exports = {
     "react-hooks/exhaustive-deps": "warn",
     "no-console": "off",
     "react/jsx-props-no-spreading": "off",
-    "import-helpers/order-imports": [
-      "warn",
-      {
-        newlinesBetween: "always",
-        groups: [
-          "module",
-          "/^~/",
-          ["parent", "sibling", "index"],
-        ],
-        alphabetize: { order: "asc", ignoreCase: true }
-      }
-    ],
   },
 };
