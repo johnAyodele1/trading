@@ -29,6 +29,8 @@ export interface Signal {
   stop_loss: number;
   take_profit: number;
   risk_reward: number;
+  lot_size?: number;
+  leverage?: number;
   confidence_score: number;
   historical_win_rate: number;
   regime: MarketRegime;

@@ -8,11 +8,16 @@ export class Database {
 
   static getPool(): Pool {
     if (!this.pool) {
+      const connectionString = process.env.DATABASE_URL;
+
+      if (!connectionString) {
+        console.warn("DATABASE_URL not found in environment. Using default local postgres.");
+      }
+
       this.pool = new Pool({
-        connectionString:
-          process.env.DATABASE_URL ||
-          "postgresql://postgres:mypassword@localhost:5432/trading_engine",
+        connectionString: connectionString || "postgresql://postgres@localhost:5432/trading_engine",
       });
+
       this.pool.on("error", (err) =>
         console.error("Unexpected error on idle client", err),
       );
