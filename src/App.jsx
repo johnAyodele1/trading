@@ -1,35 +1,75 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+import './App.css';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const fetchAnalysis = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await axios.get('http://localhost:3001/api/analysis');
+      setResults(response.data);
+    } catch (err) {
+      setError('Failed to fetch analysis results. Make sure the server is running.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAnalysis();
+  }, []);
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
+    <div className="dashboard">
+      <h1>Forex Intelligence Dashboard</h1>
+      <div className="controls">
+        <button onClick={fetchAnalysis} disabled={loading}>
+          {loading ? 'Analyzing...' : 'Run New Analysis'}
         </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
       </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+
+      {error && <div className="error">{error}</div>}
+
+      {loading && <div className="loading">Processing market data... this may take a minute.</div>}
+
+      {!loading && results.length > 0 && (
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Currency Pair</th>
+                <th>Win Rate (%)</th>
+                <th>Expectancy (R)</th>
+                <th>Max Drawdown (R)</th>
+                <th>Stability Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {results.map((res) => (
+                <tr key={res.symbol}>
+                  <td>{res.symbol}</td>
+                  <td className={res.winRate > 0.5 ? 'positive' : 'negative'}>
+                    {(res.winRate * 100).toFixed(2)}%
+                  </td>
+                  <td className={res.expectancy > 0 ? 'positive' : 'negative'}>
+                    {res.expectancy.toFixed(3)}
+                  </td>
+                  <td>{res.maxDrawdown.toFixed(2)}</td>
+                  <td>{res.stabilityScore.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }
 
-export default App
+export default App;
