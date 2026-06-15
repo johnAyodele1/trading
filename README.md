@@ -17,10 +17,10 @@ A professional-grade quantitative trading signal engine built with TypeScript, f
 *   PostgreSQL (optional, defaults to in-memory mode if unavailable)
 
 ### Environment Variables
-Create a `.env` file in the root directory:
+Create a `.env` file in the root directory. You can use `.env.example` as a template:
 ```env
 ENGINE_MODE=BACKTEST  # Options: BACKTEST or LIVE
-DATABASE_URL=postgresql://user:pass@localhost:5432/db_name
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/trading_engine
 ```
 
 ### Installation
